@@ -1736,7 +1736,7 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
 
                 var elapsedMs = Math.Clamp(now - _lastFrameMs, 0, 120);
                 _lastFrameMs = now;
-                _flowOffset = (_flowOffset + elapsedMs / 6000f) % 1f;
+                _flowOffset = (_flowOffset + elapsedMs / 9000f) % 1f;
                 Invalidate();
                 PostDelayed(_invalidateAction, 32);
             });
@@ -1765,7 +1765,9 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
             DrawGlow(canvas, width * 0.92f, height * 0.62f, width * 0.78f, _palette.Secondary);
             DrawGlow(canvas, width * 0.18f, height * 0.94f, width * 0.58f, _palette.Tertiary);
 
-            DrawFlowBand(canvas, width, height, _flowOffset);
+            DrawFlowGlow(canvas, width, height, _flowOffset, _palette.Highlight, 0f, 0.38f, 0.30f, 0.46f);
+            DrawFlowGlow(canvas, width, height, _flowOffset, _palette.Primary, 0.33f, 0.30f, 0.24f, 0.34f);
+            DrawFlowGlow(canvas, width, height, _flowOffset, _palette.Secondary, 0.66f, 0.34f, 0.26f, 0.30f);
 
             base.OnDraw(canvas);
         }
@@ -1794,33 +1796,14 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
             _paint.SetShader(null);
         }
 
-        private void DrawFlowBand(Canvas canvas, int width, int height, float offset)
+        private void DrawFlowGlow(Canvas canvas, int width, int height, float offset, Color color, float phaseShift, float radiusScale, float xDrift, float yDrift)
         {
-            var travel = width + height;
-            var phase = offset;
-            var alpha = (int)(MathF.Sin(phase * MathF.PI) * _palette.Highlight.A);
-            if (alpha <= 0)
-            {
-                return;
-            }
-
-            var center = (phase * 2f - 0.5f) * travel;
-            var bandWidth = Math.Max(width * 0.32f, 80f);
-            var bandLength = MathF.Sqrt(width * width + height * height) * 1.4f;
-
-            canvas.Save();
-            canvas.Rotate(32f, width / 2f, height / 2f);
-            _paint.SetShader(null);
-            _paint.Color = WithAlpha(_palette.Highlight, alpha);
-            canvas.DrawRoundRect(
-                center - bandWidth / 2f,
-                -height * 0.7f,
-                center + bandWidth / 2f,
-                -height * 0.7f + bandLength,
-                bandWidth / 2f,
-                bandWidth / 2f,
-                _paint);
-            canvas.Restore();
+            var phase = (offset + phaseShift) * MathF.PI * 2f;
+            var x = width * (0.5f + MathF.Cos(phase) * xDrift);
+            var y = height * (0.5f + MathF.Sin(phase * 0.82f + phaseShift * 2f) * yDrift);
+            var radius = Math.Max(width, height) * radiusScale;
+            var alpha = Math.Clamp((int)(color.A * 0.45f), 0, 150);
+            DrawGlow(canvas, x, y, radius, WithAlpha(color, alpha));
         }
 
         private static Color WithAlpha(Color color, int alpha)
