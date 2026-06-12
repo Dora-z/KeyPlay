@@ -1720,6 +1720,7 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
             Color.Rgb(236, 212, 193),
             Color.Rgb(184, 212, 232),
             Color.Argb(170, 255, 255, 255));
+        private long _lastFrameMs;
         private float _flowOffset;
 
         public PlayerPageLayout(Context context) : base(context)
@@ -1727,7 +1728,15 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
             SetWillNotDraw(false);
             _invalidateAction = new RunnableAction(() =>
             {
-                _flowOffset = (_flowOffset + 0.012f) % 1f;
+                var now = Java.Lang.JavaSystem.CurrentTimeMillis();
+                if (_lastFrameMs == 0)
+                {
+                    _lastFrameMs = now;
+                }
+
+                var elapsedMs = Math.Clamp(now - _lastFrameMs, 0, 120);
+                _lastFrameMs = now;
+                _flowOffset = (_flowOffset + elapsedMs / 6000f) % 1f;
                 Invalidate();
                 PostDelayed(_invalidateAction, 48);
             });
@@ -1756,18 +1765,8 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
             DrawGlow(canvas, width * 0.92f, height * 0.62f, width * 0.78f, _palette.Secondary);
             DrawGlow(canvas, width * 0.18f, height * 0.94f, width * 0.58f, _palette.Tertiary);
 
-            var diagonal = width + height;
-            var center = (_flowOffset * 2f - 0.5f) * diagonal;
-            _paint.SetShader(new LinearGradient(
-                center - width * 0.38f,
-                0,
-                center + width * 0.38f,
-                height,
-                Color.Transparent,
-                _palette.Highlight,
-                Shader.TileMode.Clamp!));
-            canvas.DrawRect(0, 0, width, height, _paint);
-            _paint.SetShader(null);
+            DrawFlowBand(canvas, width, height, _flowOffset);
+            DrawFlowBand(canvas, width, height, (_flowOffset + 0.5f) % 1f);
 
             base.OnDraw(canvas);
         }
@@ -1793,6 +1792,22 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
                 WithAlpha(color, 0),
                 Shader.TileMode.Clamp!));
             canvas.DrawCircle(x, y, radius, _paint);
+            _paint.SetShader(null);
+        }
+
+        private void DrawFlowBand(Canvas canvas, int width, int height, float offset)
+        {
+            var travel = width + height;
+            var center = (offset * 2f - 0.5f) * travel;
+            _paint.SetShader(new LinearGradient(
+                center - width * 0.42f,
+                0,
+                center + width * 0.42f,
+                height,
+                Color.Transparent,
+                _palette.Highlight,
+                Shader.TileMode.Clamp!));
+            canvas.DrawRect(0, 0, width, height, _paint);
             _paint.SetShader(null);
         }
 
