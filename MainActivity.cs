@@ -54,7 +54,7 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
     private LinearLayout? _nowPanel;
     private LinearLayout? _rootView;
     private ListView? _list;
-    private LinearLayout? _playerPage;
+    private PlayerPageLayout? _playerPage;
     private ImageView? _coverView;
     private TextView? _playerTitle;
     private TextView? _playerArtist;
@@ -572,23 +572,22 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
         return root;
     }
 
-    private LinearLayout BuildPlayerPage()
+    private PlayerPageLayout BuildPlayerPage()
     {
-        var page = new LinearLayout(this)
+        var page = new PlayerPageLayout(this)
         {
             Orientation = ViewOrientation.Vertical,
             Focusable = true,
             FocusableInTouchMode = true,
         };
-        page.SetBackgroundColor(Color.Rgb(24, 34, 40));
         page.SetPadding(Dp(18), Dp(18), Dp(18), Dp(12));
 
-        _playerTitle = MakeText("KeyPlay", 23, Color.White, TypefaceStyle.Bold);
+        _playerTitle = MakeText("KeyPlay", 23, Color.Rgb(24, 39, 42), TypefaceStyle.Bold);
         _playerTitle.SetSingleLine(true);
         _playerTitle.Ellipsize = TextUtils.TruncateAt.End;
         page.AddView(_playerTitle, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(38)));
 
-        _playerArtist = MakeText("未知歌手", 16, Color.Rgb(218, 229, 233), TypefaceStyle.Bold);
+        _playerArtist = MakeText("未知歌手", 16, Color.Rgb(61, 82, 86), TypefaceStyle.Bold);
         _playerArtist.SetSingleLine(true);
         _playerArtist.Ellipsize = TextUtils.TruncateAt.End;
         page.AddView(_playerArtist, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, Dp(30)));
@@ -623,11 +622,11 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
         };
         timeRow.SetGravity(GravityFlags.CenterVertical);
 
-        _playerCurrentTimeText = MakeText("00:00", 13, Color.Rgb(236, 242, 244), TypefaceStyle.Bold);
+        _playerCurrentTimeText = MakeText("00:00", 13, Color.Rgb(44, 61, 65), TypefaceStyle.Bold);
         _playerCurrentTimeText.SetIncludeFontPadding(false);
         timeRow.AddView(_playerCurrentTimeText, new LinearLayout.LayoutParams(0, Dp(22), 1));
 
-        _playerDurationText = MakeText("00:00", 13, Color.Rgb(236, 242, 244), TypefaceStyle.Bold);
+        _playerDurationText = MakeText("00:00", 13, Color.Rgb(44, 61, 65), TypefaceStyle.Bold);
         _playerDurationText.Gravity = GravityFlags.Right | GravityFlags.CenterVertical;
         _playerDurationText.SetIncludeFontPadding(false);
         timeRow.AddView(_playerDurationText, new LinearLayout.LayoutParams(0, Dp(22), 1));
@@ -1531,10 +1530,10 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
 
     private void ApplyCoverBackground(Bitmap bitmap)
     {
-        _playerPage?.SetBackgroundColor(GetDarkCoverColor(bitmap));
+        _playerPage?.SetPalette(GetLightFlowPalette(bitmap));
     }
 
-    private Color GetDarkCoverColor(Bitmap bitmap)
+    private LightFlowPalette GetLightFlowPalette(Bitmap bitmap)
     {
         var width = Math.Max(1, bitmap.Width);
         var height = Math.Max(1, bitmap.Height);
@@ -1542,6 +1541,10 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
         var stepY = Math.Max(1, height / 16);
         var bestHue = 200f;
         var bestScore = -1f;
+        long red = 0;
+        long green = 0;
+        long blue = 0;
+        var count = 0;
 
         for (var y = stepY / 2; y < height; y += stepY)
         {
@@ -1555,15 +1558,44 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
                     bestHue = hue;
                     bestScore = chromaScore;
                 }
+
+                red += color.R;
+                green += color.G;
+                blue += color.B;
+                count++;
             }
         }
 
         if (bestScore < 0.08f)
         {
-            return Color.Rgb(74, 77, 78);
+            bestHue = count == 0
+                ? 190f
+                : GetNeutralHue((int)(red / count), (int)(green / count), (int)(blue / count));
         }
 
-        return HslToColor(bestHue, 0.24f, 0.34f);
+        var secondaryHue = (bestHue + 34f) % 360f;
+        var tertiaryHue = (bestHue + 318f) % 360f;
+        return new LightFlowPalette(
+            HslToColor(bestHue, 0.26f, 0.80f),
+            HslToColor(bestHue, 0.40f, 0.88f),
+            HslToColor(secondaryHue, 0.34f, 0.90f),
+            HslToColor(tertiaryHue, 0.32f, 0.86f),
+            Color.Argb(170, 255, 255, 255));
+    }
+
+    private static float GetNeutralHue(int red, int green, int blue)
+    {
+        if (blue >= red && blue >= green)
+        {
+            return 205f;
+        }
+
+        if (green >= red)
+        {
+            return 158f;
+        }
+
+        return 28f;
     }
 
     private static void RgbToHsl(int red, int green, int blue, out float hue, out float saturation, out float lightness)
@@ -1675,6 +1707,115 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
     }
 
     private sealed record Track(string Title, string Artist, long DurationMs, Uri Uri, long AlbumId);
+
+    private readonly record struct LightFlowPalette(Color Surface, Color Primary, Color Secondary, Color Tertiary, Color Highlight);
+
+    private sealed class PlayerPageLayout : LinearLayout
+    {
+        private readonly Paint _paint = new(PaintFlags.AntiAlias);
+        private readonly RunnableAction _invalidateAction;
+        private LightFlowPalette _palette = new(
+            Color.Rgb(203, 220, 222),
+            Color.Rgb(182, 228, 220),
+            Color.Rgb(236, 212, 193),
+            Color.Rgb(184, 212, 232),
+            Color.Argb(170, 255, 255, 255));
+        private float _flowOffset;
+
+        public PlayerPageLayout(Context context) : base(context)
+        {
+            SetWillNotDraw(false);
+            _invalidateAction = new RunnableAction(() =>
+            {
+                _flowOffset = (_flowOffset + 0.012f) % 1f;
+                Invalidate();
+                PostDelayed(_invalidateAction, 48);
+            });
+            Post(_invalidateAction);
+        }
+
+        public void SetPalette(LightFlowPalette palette)
+        {
+            _palette = palette;
+            Invalidate();
+        }
+
+        protected override void OnDraw(Canvas? canvas)
+        {
+            if (canvas == null)
+            {
+                base.OnDraw(canvas);
+                return;
+            }
+
+            var width = Math.Max(1, Width);
+            var height = Math.Max(1, Height);
+            canvas.DrawColor(_palette.Surface);
+
+            DrawGlow(canvas, width * 0.18f, height * 0.18f, width * 0.72f, _palette.Primary);
+            DrawGlow(canvas, width * 0.92f, height * 0.62f, width * 0.78f, _palette.Secondary);
+            DrawGlow(canvas, width * 0.18f, height * 0.94f, width * 0.58f, _palette.Tertiary);
+
+            var diagonal = width + height;
+            var center = (_flowOffset * 2f - 0.5f) * diagonal;
+            _paint.SetShader(new LinearGradient(
+                center - width * 0.38f,
+                0,
+                center + width * 0.38f,
+                height,
+                Color.Transparent,
+                _palette.Highlight,
+                Shader.TileMode.Clamp!));
+            canvas.DrawRect(0, 0, width, height, _paint);
+            _paint.SetShader(null);
+
+            base.OnDraw(canvas);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                RemoveCallbacks(_invalidateAction);
+                _paint.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        private void DrawGlow(Canvas canvas, float x, float y, float radius, Color color)
+        {
+            _paint.SetShader(new RadialGradient(
+                x,
+                y,
+                Math.Max(1f, radius),
+                WithAlpha(color, 178),
+                WithAlpha(color, 0),
+                Shader.TileMode.Clamp!));
+            canvas.DrawCircle(x, y, radius, _paint);
+            _paint.SetShader(null);
+        }
+
+        private static Color WithAlpha(Color color, int alpha)
+        {
+            return Color.Argb(alpha, color.R, color.G, color.B);
+        }
+    }
+
+    private sealed class RunnableAction : Java.Lang.Object, Java.Lang.IRunnable
+    {
+        private readonly Action _action;
+
+        public RunnableAction(Action action)
+        {
+            _action = action;
+        }
+
+        public void Run()
+        {
+            _action();
+        }
+    }
 
     private sealed class MediaSessionCallback : MediaSession.Callback
     {
