@@ -1738,7 +1738,7 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
                 _lastFrameMs = now;
                 _flowOffset = (_flowOffset + elapsedMs / 6000f) % 1f;
                 Invalidate();
-                PostDelayed(_invalidateAction, 48);
+                PostDelayed(_invalidateAction, 32);
             });
             Post(_invalidateAction);
         }
@@ -1766,7 +1766,6 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
             DrawGlow(canvas, width * 0.18f, height * 0.94f, width * 0.58f, _palette.Tertiary);
 
             DrawFlowBand(canvas, width, height, _flowOffset);
-            DrawFlowBand(canvas, width, height, (_flowOffset + 0.5f) % 1f);
 
             base.OnDraw(canvas);
         }
@@ -1798,17 +1797,30 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
         private void DrawFlowBand(Canvas canvas, int width, int height, float offset)
         {
             var travel = width + height;
-            var center = (offset * 2f - 0.5f) * travel;
-            _paint.SetShader(new LinearGradient(
-                center - width * 0.42f,
-                0,
-                center + width * 0.42f,
-                height,
-                Color.Transparent,
-                _palette.Highlight,
-                Shader.TileMode.Clamp!));
-            canvas.DrawRect(0, 0, width, height, _paint);
+            var phase = offset;
+            var alpha = (int)(MathF.Sin(phase * MathF.PI) * _palette.Highlight.A);
+            if (alpha <= 0)
+            {
+                return;
+            }
+
+            var center = (phase * 2f - 0.5f) * travel;
+            var bandWidth = Math.Max(width * 0.32f, 80f);
+            var bandLength = MathF.Sqrt(width * width + height * height) * 1.4f;
+
+            canvas.Save();
+            canvas.Rotate(32f, width / 2f, height / 2f);
             _paint.SetShader(null);
+            _paint.Color = WithAlpha(_palette.Highlight, alpha);
+            canvas.DrawRoundRect(
+                center - bandWidth / 2f,
+                -height * 0.7f,
+                center + bandWidth / 2f,
+                -height * 0.7f + bandLength,
+                bandWidth / 2f,
+                bandWidth / 2f,
+                _paint);
+            canvas.Restore();
         }
 
         private static Color WithAlpha(Color color, int alpha)
