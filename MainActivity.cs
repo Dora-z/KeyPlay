@@ -1540,35 +1540,111 @@ public class MainActivity : Activity, MediaPlayer.IOnPreparedListener, MediaPlay
         var height = Math.Max(1, bitmap.Height);
         var stepX = Math.Max(1, width / 16);
         var stepY = Math.Max(1, height / 16);
-        long red = 0;
-        long green = 0;
-        long blue = 0;
-        var count = 0;
+        var bestHue = 200f;
+        var bestScore = -1f;
 
         for (var y = stepY / 2; y < height; y += stepY)
         {
             for (var x = stepX / 2; x < width; x += stepX)
             {
                 var color = new Color(bitmap.GetPixel(x, y));
-                red += color.R;
-                green += color.G;
-                blue += color.B;
-                count++;
+                RgbToHsl(color.R, color.G, color.B, out var hue, out var saturation, out var lightness);
+                var chromaScore = saturation * (1f - Math.Abs(lightness - 0.52f));
+                if (chromaScore > bestScore)
+                {
+                    bestHue = hue;
+                    bestScore = chromaScore;
+                }
             }
         }
 
-        if (count == 0)
+        if (bestScore < 0.08f)
         {
-            return Color.Rgb(24, 34, 40);
+            return Color.Rgb(74, 77, 78);
         }
 
-        var r = (int)(red / count);
-        var g = (int)(green / count);
-        var b = (int)(blue / count);
+        return HslToColor(bestHue, 0.24f, 0.34f);
+    }
+
+    private static void RgbToHsl(int red, int green, int blue, out float hue, out float saturation, out float lightness)
+    {
+        var r = red / 255f;
+        var g = green / 255f;
+        var b = blue / 255f;
+        var max = Math.Max(r, Math.Max(g, b));
+        var min = Math.Min(r, Math.Min(g, b));
+        var delta = max - min;
+
+        lightness = (max + min) / 2f;
+        if (delta <= 0.0001f)
+        {
+            hue = 0f;
+            saturation = 0f;
+            return;
+        }
+
+        saturation = delta / (1f - Math.Abs(2f * lightness - 1f));
+        if (Math.Abs(max - r) <= 0.0001f)
+        {
+            hue = 60f * (((g - b) / delta) % 6f);
+        }
+        else if (Math.Abs(max - g) <= 0.0001f)
+        {
+            hue = 60f * (((b - r) / delta) + 2f);
+        }
+        else
+        {
+            hue = 60f * (((r - g) / delta) + 4f);
+        }
+
+        if (hue < 0f)
+        {
+            hue += 360f;
+        }
+    }
+
+    private static Color HslToColor(float hue, float saturation, float lightness)
+    {
+        var chroma = (1f - Math.Abs(2f * lightness - 1f)) * saturation;
+        var x = chroma * (1f - Math.Abs((hue / 60f % 2f) - 1f));
+        var m = lightness - chroma / 2f;
+        var sector = (int)(hue / 60f);
+        var r1 = 0f;
+        var g1 = 0f;
+        var b1 = 0f;
+
+        switch (sector)
+        {
+            case 0:
+                r1 = chroma;
+                g1 = x;
+                break;
+            case 1:
+                r1 = x;
+                g1 = chroma;
+                break;
+            case 2:
+                g1 = chroma;
+                b1 = x;
+                break;
+            case 3:
+                g1 = x;
+                b1 = chroma;
+                break;
+            case 4:
+                r1 = x;
+                b1 = chroma;
+                break;
+            default:
+                r1 = chroma;
+                b1 = x;
+                break;
+        }
+
         return Color.Rgb(
-            Math.Clamp((int)(r * 0.55f), 28, 108),
-            Math.Clamp((int)(g * 0.55f), 32, 112),
-            Math.Clamp((int)(b * 0.55f), 36, 120));
+            Math.Clamp((int)((r1 + m) * 255f), 0, 255),
+            Math.Clamp((int)((g1 + m) * 255f), 0, 255),
+            Math.Clamp((int)((b1 + m) * 255f), 0, 255));
     }
 
     private void AdjustVolume(Adjust direction)
